@@ -1,0 +1,36 @@
+:root {
+  --bg-color: #ffffff;
+  --text-color: #333333;
+  --button-bg: #eeeeee;
+}
+
+body.dark {
+  --bg-color: #1a1a1a;
+  --text-color: #f0f0f0;
+  --button-bg: #444444;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: sans-serif;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+button {
+  background-color: var(--button-bg);
+  color: var(--text-color);
+  border: 1px solid var(--text-color);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+/* Character counter limit classes */
+.warning {
+  color: orange;
+}
+
+.over {
+  color: red;
+  font-weight: bold;
+}
