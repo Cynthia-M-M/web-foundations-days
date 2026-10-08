@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Day 5: User Directory & REST Client</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="users.js" defer></script>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --primary: #38bdf8;
+      --primary-hover: #0284c7;
+      --primary-focus: rgba(56, 189, 248, 0.25);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-accent: #38bdf8;
+      --success-bg: rgba(16, 185, 129, 0.15);
+      --success-text: #34d399;
+      --error-bg: rgba(239, 68, 68, 0.15);
+      --error-text: #f87171;
+      --loading-bg: rgba(56, 189, 248, 0.15);
+      --loading-text: #38bdf8;
+      --radius: 12px;
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2.5rem 1.25rem;
+      display: flex;
+      justify-content: center;
+      line-height: 1.6;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 780px;
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      box-shadow: var(--shadow);
+    }
+
+    header {
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 1.25rem;
+    }
+
+    h1 {
+      font-size: 1.85rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    h1 span {
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-top: 0.35rem;
+    }
+
+    .controls-panel {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (min-width: 600px) {
+      .controls-panel {
+        grid-template-columns: auto 1fr;
+        align-items: end;
+      }
+    }
+
+    .btn-primary {
+      background-color: var(--primary);
+      color: #0f172a;
+      border: none;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      white-space: nowrap;
+      height: 44px;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background-color: #7dd3fc;
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      filter: grayscale(30%);
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    label {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    input[type="text"] {
+      width: 100%;
+      height: 44px;
+      background-color: #0f172a;
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 0.65rem 1rem;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-focus);
+    }
+
+    input[type="text"]::placeholder {
+      color: #64748b;
+    }
+
+    #status {
+      min-height: 2.25rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 0.5rem 0.85rem;
+      border-radius: 6px;
+      margin-bottom: 1.25rem;
+      display: none;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+    }
+
+    #status.visible {
+      display: flex;
+    }
+
+    #status.status-loading {
+      background-color: var(--loading-bg);
+      color: var(--loading-text);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    #status.status-success {
+      background-color: var(--success-bg);
+      color: var(--success-text);
+      border: 1px solid rgba(52, 211, 153, 0.3);
+    }
+
+    #status.status-error {
+      background-color: var(--error-bg);
+      color: var(--error-text);
+      border: 1px solid rgba(248, 113, 113, 0.3);
+    }
+
+    #users-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+
+    .user-card {
+      background-color: #151f30;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 1.15rem 1.25rem;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .user-card:hover {
+      border-color: #475569;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+
+    .user-name {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 0.35rem;
+    }
+
+    .user-details {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.5rem;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+
+    .detail-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .detail-label {
+      color: #64748b;
+      font-weight: 500;
+    }
+
+    .detail-value {
+      color: #cbd5e1;
+    }
+
+    .empty-state {
+      background-color: #151f30;
+      border: 1px dashed var(--card-border);
+      border-radius: 10px;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>👥 <span>User Directory</span></h1>
+      <p class="subtitle">Asynchronous REST client demonstrating fetch, error handling, and client-side filtering.</p>
+    </header>
+
+    <section class="controls-panel">
+      <div>
+        <button id="load-users" class="btn-primary">Load Users</button>
+      </div>
+
+      <div class="input-group">
+        <label for="filter-input">Filter by name:</label>
+        <input type="text" id="filter-input" placeholder="Type to filter users by name...">
+      </div>
+    </section>
+
+    <p id="status" role="status" aria-live="polite"></p>
+
+    <ul id="users-list" aria-label="Users Directory"></ul>
+  </main>
+</body>
+</html>
