@@ -82,18 +82,19 @@ TicketHub uses a RESTful JSON API separating seat browsing, reservation holding,
 - **Description:** Retrieves a paginated list of upcoming events.
 - **Query Parameters:** `page=1&limit=20&genre=rock`
 - **Response:** `200 OK`
-  ```json
-  [
-    {
-      "id": "e4b2d56a-1122-48a1-871f-0e4f16bc4001",
-      "name": "Coldplay: Music of the Spheres Tour",
-      "venue": "Wembley Stadium",
-      "date": "2026-11-15T19:30:00Z",
-      "totalSeats": 20000,
-      "availableSeats": 18450
-    }
-  ]
-  ```
+
+```json
+[
+  {
+    "id": "e4b2d56a-1122-48a1-871f-0e4f16bc4001",
+    "name": "Coldplay: Music of the Spheres Tour",
+    "venue": "Wembley Stadium",
+    "date": "2026-11-15T19:30:00Z",
+    "totalSeats": 20000,
+    "availableSeats": 18450
+  }
+]
+```
 
 ---
 
@@ -101,30 +102,31 @@ TicketHub uses a RESTful JSON API separating seat browsing, reservation holding,
 
 - **Description:** Returns the complete seating layout and real-time seat availability for an event.
 - **Response:** `200 OK` (Served primarily from Redis cache)
-  ```json
-  {
-    "eventId": "e4b2d56a-1122-48a1-871f-0e4f16bc4001",
-    "updatedAt": "2026-10-12T02:00:00Z",
-    "seats": [
-      {
-        "id": "s001-a12",
-        "section": "A",
-        "row": "1",
-        "seatNumber": 12,
-        "price": 120.0,
-        "status": "available"
-      },
-      {
-        "id": "s001-a13",
-        "section": "A",
-        "row": "1",
-        "seatNumber": 13,
-        "price": 120.0,
-        "status": "held"
-      }
-    ]
-  }
-  ```
+
+```json
+{
+  "eventId": "e4b2d56a-1122-48a1-871f-0e4f16bc4001",
+  "updatedAt": "2026-10-12T02:00:00Z",
+  "seats": [
+    {
+      "id": "s001-a12",
+      "section": "A",
+      "row": "1",
+      "seatNumber": 12,
+      "price": 120.0,
+      "status": "available"
+    },
+    {
+      "id": "s001-a13",
+      "section": "A",
+      "row": "1",
+      "seatNumber": 13,
+      "price": 120.0,
+      "status": "held"
+    }
+  ]
+}
+```
 
 ---
 
@@ -133,21 +135,24 @@ TicketHub uses a RESTful JSON API separating seat browsing, reservation holding,
 - **Description:** Atomically places a 10-minute temporary lock on a specific seat for the authenticated user.
 - **Headers:** `Authorization: Bearer <jwt_token>`
 - **Success Response:** `201 Created`
-  ```json
-  {
-    "seatId": "s001-a12",
-    "status": "held",
-    "heldByUserId": "u991-8821-ab",
-    "holdExpiresAt": "2026-10-12T02:10:00Z",
-    "message": "Seat held successfully. Complete payment within 10 minutes."
-  }
-  ```
+
+```json
+{
+  "seatId": "s001-a12",
+  "status": "held",
+  "heldByUserId": "u991-8821-ab",
+  "holdExpiresAt": "2026-10-12T02:10:00Z",
+  "message": "Seat held successfully. Complete payment within 10 minutes."
+}
+```
+
 - **Conflict Response:** `409 Conflict`
-  ```json
-  {
-    "error": "Seat is already held or sold by another customer."
-  }
-  ```
+
+```json
+{
+  "error": "Seat is already held or sold by another customer."
+}
+```
 
 ---
 
@@ -156,24 +161,28 @@ TicketHub uses a RESTful JSON API separating seat browsing, reservation holding,
 - **Description:** Finalizes the purchase of the currently held seat and processes payment.
 - **Headers:** `Authorization: Bearer <jwt_token>`
 - **Request Body:**
-  ```json
-  {
-    "seatId": "s001-a12",
-    "eventId": "e4b2d56a-1122-48a1-871f-0e4f16bc4001",
-    "paymentToken": "tok_visa_4242",
-    "amount": 120.0
-  }
-  ```
+
+```json
+{
+  "seatId": "s001-a12",
+  "eventId": "e4b2d56a-1122-48a1-871f-0e4f16bc4001",
+  "paymentToken": "tok_visa_4242",
+  "amount": 120.0
+}
+```
+
 - **Success Response:** `201 Created`
-  ```json
-  {
-    "orderId": "ord_91827364",
-    "seatId": "s001-a12",
-    "status": "confirmed",
-    "ticketCode": "TKT-CP-981240",
-    "createdAt": "2026-10-12T02:05:32Z"
-  }
-  ```
+
+```json
+{
+  "orderId": "ord_91827364",
+  "seatId": "s001-a12",
+  "status": "confirmed",
+  "ticketCode": "TKT-CP-981240",
+  "createdAt": "2026-10-12T02:05:32Z"
+}
+```
+
 - **Expired Hold Response:** `410 Gone` (if user paid after the 10-minute window).
 
 ---
@@ -183,18 +192,19 @@ TicketHub uses a RESTful JSON API separating seat browsing, reservation holding,
 - **Description:** Retrieves all confirmed tickets purchased by the user.
 - **Headers:** `Authorization: Bearer <jwt_token>`
 - **Response:** `200 OK`
-  ```json
-  [
-    {
-      "orderId": "ord_91827364",
-      "ticketCode": "TKT-CP-981240",
-      "eventName": "Coldplay: Music of the Spheres Tour",
-      "venue": "Wembley Stadium",
-      "seat": "Section A, Row 1, Seat 12",
-      "eventDate": "2026-11-15T19:30:00Z"
-    }
-  ]
-  ```
+
+```json
+[
+  {
+    "orderId": "ord_91827364",
+    "ticketCode": "TKT-CP-981240",
+    "eventName": "Coldplay: Music of the Spheres Tour",
+    "venue": "Wembley Stadium",
+    "seat": "Section A, Row 1, Seat 12",
+    "eventDate": "2026-11-15T19:30:00Z"
+  }
+]
+```
 
 ---
 
@@ -500,15 +510,17 @@ To guarantee fairness and prevent seats from becoming permanently locked if a us
    $$\text{status} = \text{'held'} \text{ AND } \text{hold\_expires\_at} < \text{NOW}()$$
    If an abandoned seat is clicked by a new user after 10 minutes, the query automatically reclaims the seat and assigns it to the new user in a single atomic operation without waiting for a background worker.
 2. **Active Asynchronous Sweeper (Scheduled Worker):**
-   - A lightweight background worker runs every 15 seconds:
-     ```sql
-     UPDATE seats
-     SET status = 'available',
-         held_by_user_id = NULL,
-         hold_expires_at = NULL
-     WHERE status = 'held'
-       AND hold_expires_at < NOW();
-     ```
+   - A lightweight background worker runs every 15 seconds to sweep abandoned seats:
+
+```sql
+UPDATE seats
+SET status = 'available',
+    held_by_user_id = NULL,
+    hold_expires_at = NULL
+WHERE status = 'held'
+  AND hold_expires_at < NOW();
+```
+
    - Thanks to the partial index `CREATE INDEX idx_seats_hold_expiry ON seats(hold_expires_at) WHERE status = 'held'`, this query executes in $<5\text{ ms}$, freeing abandoned seats and broadcasting an update via WebSocket/Redis PubSub to refresh the live seat map for waiting fans.
 
 ---
