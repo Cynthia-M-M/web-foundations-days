@@ -1,6 +1,6 @@
-# 🎟️ System Design Document: TicketHub
+# System Design Document: TicketHub
 
-A distributed, high-scale system design specification for **TicketHub**, an event ticketing platform built to handle massive traffic spikes during high-demand concert sales while strictly preventing seat double-booking.
+A distributed, high-scale system design specification for **TicketHub**, an event ticketing platform engineered to handle massive traffic surges during high-demand concert sales while strictly preventing seat double-booking.
 
 ---
 
@@ -10,14 +10,14 @@ A distributed, high-scale system design specification for **TicketHub**, an even
 
 - **Event Discovery:** Users can browse upcoming concerts, festivals, and events with filters (date, venue, genre).
 - **Seat Map & Availability:** Users can view real-time seating charts and availability statuses for a selected event.
-- **Temporary Seat Hold:** Users can temporarily hold a specific seat for 10 minutes while they enter payment information.
+- **Temporary Seat Hold:** Users can temporarily hold a specific seat for 10 minutes while entering payment details.
 - **Ticket Purchase:** Users can complete secure payment for held seats to finalize the transaction.
-- **Ticket Management:** Users can view and access their order history and digital tickets with unique verification codes.
+- **Ticket Management:** Users can view and access order history and digital tickets with unique verification codes.
 
 ### Non-Functional Requirements
 
 - **Correctness & Consistency (Zero Double-Booking):** Strict transactional ACID guarantees. Two users must **never** be able to reserve or purchase the same seat under any circumstance.
-- **Speed & Latency:** Browsing event catalogs and viewing seat maps must load in **under 200 ms** ($P99$).
+- **Speed & Latency:** Browsing event catalogs and viewing seat maps must load in **under 200 ms** (P99).
 - **Fairness:** High-demand ticket drops must enforce a strict First-Come, First-Served (FCFS) queuing mechanism with fair rate limits to deter automated scalping bots.
 - **High Availability & Fault Tolerance:** The core system must maintain **99.99% availability** with no single point of failure (SPOF), gracefully absorbing extreme traffic spikes without crashing.
 
@@ -25,26 +25,26 @@ A distributed, high-scale system design specification for **TicketHub**, an even
 
 ## 2. Capacity & Traffic Estimates
 
-The platform must serve baseline everyday traffic as well as sudden, massive demand surges when stadium concerts go on sale. _(Standard engineering approximation: $1\text{ day} \approx 100,000\text{ seconds}$)_.
+The platform must serve baseline everyday traffic as well as sudden, massive demand surges when stadium concerts go on sale. _(Standard engineering approximation: 1 day ≈ 100,000 seconds)_.
 
 ### Baseline System Facts
 
-- **Registered User Base:** $2,000,000\text{ registered users}$.
-- **Normal Daily Visitors:** $50,000\text{ unique visitors/day}$, each viewing an average of $10\text{ pages}$.
-- **Normal Daily Sales:** $5,000\text{ tickets sold/day}$.
-- **"Big Sale" Peak Scenario:** $200,000\text{ concurrent users}$ competing for $20,000\text{ seats}$ within the first $10\text{ minutes}$ ($600\text{ seconds}$).
+- **Registered User Base:** 2,000,000 registered users.
+- **Normal Daily Visitors:** 50,000 unique visitors/day, each viewing an average of 10 pages.
+- **Normal Daily Sales:** 5,000 tickets sold/day.
+- **"Big Sale" Peak Scenario:** 200,000 concurrent users competing for 20,000 seats within the first 10 minutes (600 seconds).
 
 ---
 
 ### A. Normal Daily Traffic (Baseline)
 
 - **Daily Page Views (Reads):**
-  $$\text{Total Reads} = 50,000\text{ visitors} \times 10\text{ page views} = \mathbf{500,000\text{ reads/day}}$$
+  Total Reads = 50,000 visitors \* 10 page views = **500,000 reads/day**
 - **Average Read QPS:**
-  $$\text{Average Read QPS} = \frac{500,000\text{ reads}}{100,000\text{ seconds}} = \mathbf{5\text{ reads/second}}$$
+  Average Read QPS = 500,000 reads / 100,000 seconds = **5 reads/second**
 - **Normal Ticket Sales (Writes):**
-  $$\text{Average Write QPS} = \frac{5,000\text{ tickets}}{100,000\text{ seconds}} = \mathbf{0.05\text{ writes/second}}$$
-- _Baseline Takeaway:_ Everyday operations generate negligible load ($5\text{ reads/s}$, $0.05\text{ writes/s}$), which can comfortably run on a single low-spec application server and database instance.
+  Average Write QPS = 5,000 tickets / 100,000 seconds = **0.05 writes/second**
+- _Baseline Takeaway:_ Everyday operations generate negligible load (5 reads/s, 0.05 writes/s), which can comfortably run on a single low-spec application server and database instance.
 
 ---
 
@@ -52,30 +52,30 @@ The platform must serve baseline everyday traffic as well as sudden, massive dem
 
 When a stadium concert goes on sale, traffic spikes instantaneously:
 
-- **Peak Window:** $10\text{ minutes} = 600\text{ seconds}$.
-- **Peak Read Volume:** $200,000\text{ users}$ actively refreshing the seat map $10\text{ times}$ during the rush:
-  $$\text{Peak Reads} = 200,000 \times 10 = 2,000,000\text{ reads in 600 seconds}$$
-  $$\text{Peak Read QPS} = \frac{2,000,000\text{ reads}}{600\text{ seconds}} \approx \mathbf{3,333\text{ reads/second}}$$
-- **Peak Write / Hold Contention:** $200,000\text{ users}$ attempting to hold $20,000\text{ available seats}$:
-  $$\text{Peak Write QPS} = \frac{200,000\text{ hold attempts}}{600\text{ seconds}} \approx \mathbf{333\text{ write attempts/second}}$$
+- **Peak Window:** 10 minutes = 600 seconds.
+- **Peak Read Volume:** 200,000 users actively refreshing the seat map 10 times during the rush:
+  Peak Reads = 200,000 \* 10 = 2,000,000 reads in 600 seconds
+  Peak Read QPS = 2,000,000 reads / 600 seconds ≈ **3,333 reads/second**
+- **Peak Write / Hold Contention:** 200,000 users attempting to hold 20,000 available seats:
+  Peak Write QPS = 200,000 hold attempts / 600 seconds ≈ **333 write attempts/second**
 
 ---
 
 ### C. Traffic Comparison & Bottleneck Analysis
 
-| Metric               | Normal Day                   | "Big Sale" Peak                           | Surge Factor                                    |
-| :------------------- | :--------------------------- | :---------------------------------------- | :---------------------------------------------- |
-| **Read Throughput**  | $5\text{ QPS}$               | $\mathbf{3,333\text{ QPS}}$               | **$666\times\text{ increase } (+66,560\%)$**    |
-| **Write Throughput** | $0.05\text{ QPS}$            | $\mathbf{333\text{ QPS}}$                 | **$6,660\times\text{ increase } (+665,900\%)$** |
-| **Contention Ratio** | $1 : 1\text{ (ample seats)}$ | $\mathbf{10 : 1}\text{ (users to seats)}$ | Extreme lock contention on row updates          |
+| Metric               | Normal Day          | "Big Sale" Peak             | Surge Factor                           |
+| :------------------- | :------------------ | :-------------------------- | :------------------------------------- |
+| **Read Throughput**  | 5 QPS               | **3,333 QPS**               | **666x increase (+66,560%)**           |
+| **Write Throughput** | 0.05 QPS            | **333 QPS**                 | **6,660x increase (+665,900%)**        |
+| **Contention Ratio** | 1 : 1 (ample seats) | **10 : 1 (users to seats)** | Extreme lock contention on row updates |
 
-_Critical Bottleneck:_ If $3,333\text{ reads/s}$ and $333\text{ concurrent write transactions}$ hit a single PostgreSQL instance directly, database connection pools will be exhausted within seconds, disk I/O will saturate, and the service will experience an outright outage. **Solution:** Protect the database using in-memory caching (Redis) for reads and a virtual waiting room queue (RabbitMQ / Redis) to meter write contention.
+_Critical Bottleneck:_ If 3,333 reads/s and 333 concurrent write transactions hit a single PostgreSQL instance directly, database connection pools will be exhausted within seconds, disk I/O will saturate, and the service will experience an outright outage. **Solution:** Protect the database using in-memory caching (Redis) for reads, a virtual waiting room queue (Redis Sorted Sets) to meter incoming traffic, and row-level locking with atomic conditional updates for seat holds.
 
 ---
 
 ## 3. API Design
 
-TicketHub uses a RESTful JSON API separating seat browsing, reservation holding, payment execution, and order retrieval.
+TicketHub provides a RESTful JSON API cleanly separating event browsing, seat availability viewing, temporary reservations, payment processing, and ticket management.
 
 ### Endpoint 1: `GET /api/events`
 
@@ -111,7 +111,7 @@ TicketHub uses a RESTful JSON API separating seat browsing, reservation holding,
     {
       "id": "s001-a12",
       "section": "A",
-      "row": "1",
+      "row": 1,
       "seatNumber": 12,
       "price": 120.0,
       "status": "available"
@@ -119,7 +119,7 @@ TicketHub uses a RESTful JSON API separating seat browsing, reservation holding,
     {
       "id": "s001-a13",
       "section": "A",
-      "row": "1",
+      "row": 1,
       "seatNumber": 13,
       "price": 120.0,
       "status": "held"
@@ -133,7 +133,7 @@ TicketHub uses a RESTful JSON API separating seat browsing, reservation holding,
 ### Endpoint 3: `POST /api/seats/{id}/hold`
 
 - **Description:** Atomically places a 10-minute temporary lock on a specific seat for the authenticated user.
-- **Headers:** `Authorization: Bearer <jwt_token>`
+- **Headers:** `Authorization: Bearer <jwt_token>`, `Content-Type: application/json`
 - **Success Response:** `201 Created`
 
 ```json
@@ -159,7 +159,7 @@ TicketHub uses a RESTful JSON API separating seat browsing, reservation holding,
 ### Endpoint 4: `POST /api/orders`
 
 - **Description:** Finalizes the purchase of the currently held seat and processes payment.
-- **Headers:** `Authorization: Bearer <jwt_token>`
+- **Headers:** `Authorization: Bearer <jwt_token>`, `Content-Type: application/json`
 - **Request Body:**
 
 ```json
@@ -210,7 +210,7 @@ TicketHub uses a RESTful JSON API separating seat browsing, reservation holding,
 
 ## 4. Data Model
 
-A relational PostgreSQL database enforces referential integrity, strong typing, and transactional constraints.
+A relational PostgreSQL database enforces referential integrity, strong typing, and transactional constraints across 4 core tables: `users`, `events`, `seats`, and `orders`.
 
 ```mermaid
 erDiagram
@@ -232,6 +232,7 @@ erDiagram
         timestamp event_date
         string venue
         int total_seats
+        timestamp created_at
     }
     SEATS {
         uuid id PK
@@ -344,8 +345,8 @@ TicketHub configures PostgreSQL to use **`READ COMMITTED` with explicit row-leve
 #### Why `SERIALIZABLE` and `REPEATABLE READ` Fail Under Sudden Surges:
 
 1. Under `SERIALIZABLE` or `REPEATABLE READ`, if Transaction A and Transaction B attempt to update the same seat row concurrently, the first transaction commits while the second is aborted by the database engine with:
-   $$\text{ERROR: 40001: could not serialize access due to concurrent update}$$
-2. Under our peak scenario ($200,000\text{ users}$ contending for $20,000\text{ seats}$), 90% of transactions hitting the same seat would throw serialization abort errors, triggering massive application retry storms, saturating connection pools, and knocking down the database.
+   `ERROR: 40001: could not serialize access due to concurrent update`
+2. Under our peak scenario (200,000 users contending for 20,000 seats), 90% of transactions hitting the same seat would throw serialization abort errors, triggering massive application retry storms, saturating connection pools, and knocking down the database.
 
 #### Why `READ COMMITTED` with Row-Level Locking Is Optimal:
 
@@ -362,22 +363,22 @@ When implementing seat holds, system designers have two distinct locking choices
 
 ```text
                   Incoming Hold Requests (Peak: 333 writes/s, high hotspot contention)
-                                                │
-                                                ▼
-     ┌─────────────────────────────────────────────────────────────────────────────────────┐
-     │ TIER 1: Distributed Token with TTL (Redis In-Memory Guard)                          │
-     │ • Atomic Lua script evaluates lock in <1 ms                                         │
-     │ • Only 1 user acquires the key 'seat:lock:{seat_id}' with EX 600                    │
-     │ • 99% of losing contenders fail immediately at Redis without touching PostgreSQL     │
-     └──────────────────────────────────┬──────────────────────────────────────────────────┘
-                                        │ (Winner only)
-                                        ▼
-     ┌─────────────────────────────────────────────────────────────────────────────────────┐
-     │ TIER 2: Relational ACID Transaction (PostgreSQL Authoritative Source of Truth)       │
-     │ • Isolation Level: READ COMMITTED with Row-Level Lock & Statement Timeout           │
-     │ • Enforces foreign keys, CHECK constraints, and financial transaction boundaries   │
-     │ • Persists status = 'held', held_by_user_id, hold_expires_at                        │
-     └─────────────────────────────────────────────────────────────────────────────────────┘
+                                                |
+                                                v
+     +---------------------------------------------------------------------------------------+
+     | TIER 1: Distributed Token with TTL (Redis In-Memory Guard)                            |
+     | * Atomic Lua script evaluates lock in <1 ms                                           |
+     | * Only 1 user acquires the key 'seat:lock:{seat_id}' with EX 600                      |
+     | * 99% of losing contenders fail immediately at Redis without touching PostgreSQL       |
+     +---------------------------------------------------------------------------------------+
+                                                | (Winner only)
+                                                v
+     +---------------------------------------------------------------------------------------+
+     | TIER 2: Relational ACID Transaction (PostgreSQL Authoritative Source of Truth)         |
+     | * Isolation Level: READ COMMITTED with Row-Level Lock & Statement Timeout             |
+     | * Enforces foreign keys, CHECK constraints, and financial transaction boundaries     |
+     | * Persists status = 'held', held_by_user_id, hold_expires_at                          |
+     +---------------------------------------------------------------------------------------+
 ```
 
 #### Comparison Matrix:
@@ -385,8 +386,8 @@ When implementing seat holds, system designers have two distinct locking choices
 | Dimension               | Option 1: Database Pessimistic Row Locking                                    | Option 2: Distributed Tokens with TTL (Redis)                          | TicketHub's Hybrid Choice                           |
 | :---------------------- | :---------------------------------------------------------------------------- | :--------------------------------------------------------------------- | :-------------------------------------------------- |
 | **Mechanics**           | `SELECT ... FOR UPDATE` or conditional `UPDATE` row lock in PostgreSQL engine | Atomic key acquisition `SET key val NX EX 600` via Lua script in Redis | **Tier 1 (Redis) + Tier 2 (Postgres)**              |
-| **Throughput**          | Limited by disk I/O and connection pools ($\approx 1,000\text{ write tx/s}$)  | In-memory single-threaded execution ($>100,000\text{ ops/s}$)          | Extreme speed at edge; low write load at DB         |
-| **Contention Handling** | Contenders queue in database lock manager; can exhaust pool under surge       | Non-blocking or sub-millisecond check; immediate 409 rejection         | Rejects losers in $<2\text{ ms}$; shields DB        |
+| **Throughput**          | Limited by disk I/O and connection pools (≈ 1,000 write tx/s)                 | In-memory single-threaded execution (>100,000 ops/s)                   | Extreme speed at edge; low write load at DB         |
+| **Contention Handling** | Contenders queue in database lock manager; can exhaust pool under surge       | Non-blocking or sub-millisecond check; immediate 409 rejection         | Rejects losers in <2 ms; shields DB                 |
 | **TTL Expiration**      | Requires active polling sweeper or lazy evaluation                            | Native Redis expiration (`EX 600`) frees memory automatically          | Native Redis TTL + DB lazy evaluation + sweeper     |
 | **Consistency**         | 100% ACID compliant, relational integrity guaranteed                          | In-memory; network partition could cause stale state                   | Redis gates traffic; Postgres guarantees ACID truth |
 
@@ -433,33 +434,33 @@ SET status = 'held',
 WHERE id = 'Seat_1_UUID'
   AND (
       status = 'available'
-      OR (status = 'held' AND hold_expires_at < NOW()) -- Inline lazy expiration
+      OR (status = 'held' AND hold_expires_at < NOW()) -- Lazy expiry release
   );
 
--- Application Verification:
--- IF rows_affected == 1:
+-- Application checks affected rows:
+-- If rows_affected == 1:
 COMMIT;
--- Return HTTP 201 Created
+-- Return 201 Created to client.
 
--- IF rows_affected == 0:
--- (Seat was sold or held concurrently)
-ROLLBACK;
--- Release Redis key: DEL seat:lock:Seat_1_UUID
--- Return HTTP 409 Conflict
+-- If rows_affected == 0 (seat was snatched right before or sold):
+-- ROLLBACK;
+-- Release Redis lock token: DEL "seat:lock:Seat_1_UUID"
+-- Return 409 Conflict to client.
 ```
 
 ---
 
 ### D. Step 2: Finalizing Payment & Transitioning to 'sold'
 
-When User A submits payment within the 10-minute hold window, the payment gateway token is charged. Upon payment authorization, the system finalizes the sale within an ACID transaction:
+When User A completes payment within the 10-minute window, the application executes the final purchase transaction:
 
 ```sql
+-- Explicit Final Order Purchase Transaction Boundary
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+
 SET LOCAL statement_timeout = '3000ms';
 
--- Step 1: Transition seat from 'held' to 'sold'
--- Strictly verify the hold belongs to User A and has NOT expired
+-- 1. Atomically transition seat status to 'sold'
 UPDATE seats
 SET status = 'sold',
     hold_expires_at = NULL
@@ -468,11 +469,12 @@ WHERE id = 'Seat_1_UUID'
   AND status = 'held'
   AND hold_expires_at >= NOW();
 
--- Step 2: Verify exactly 1 row was updated
--- If rows_affected == 0, user paid after the 10-minute window expired!
--- Action: ROLLBACK transaction, issue refund via payment gateway, return HTTP 410 Gone.
+-- Check affected rows:
+-- If rows_affected == 0:
+--   ROLLBACK;
+--   Return 410 Gone ("Your hold expired before payment was processed. Seat has been released.")
 
--- Step 3: Insert permanent audit and fulfillment record into orders table
+-- 2. Insert financial record and confirmed ticket
 INSERT INTO orders (
     user_id,
     event_id,
@@ -491,26 +493,28 @@ INSERT INTO orders (
 
 COMMIT;
 
--- Post-Commit: Remove the Redis hold token now that the seat is permanently sold
--- DEL seat:lock:Seat_1_UUID
+-- Post-commit cleanup:
+-- Delete Redis hold token: DEL "seat:lock:Seat_1_UUID"
+-- Invalidate Redis cached seat map for Event_UUID
 ```
 
 #### Dual Protection Against Double-Booking:
 
-1. **Row-Level Conditional Transition:** The seat update only succeeds if `held_by_user_id = 'UserA_UUID'`, `status = 'held'`, and `hold_expires_at >= NOW()`.
-2. **Database Unique Constraint (`orders.seat_id UNIQUE`):** The relational engine physically forbids creating two orders for the same seat. Even under extreme edge conditions, the database will raise constraint violation error `23505`, preventing duplicate tickets from being issued.
+1. **Application / Transaction Layer:** The `UPDATE seats` statement checks `held_by_user_id = 'UserA_UUID'` and `hold_expires_at >= NOW()`. If the user's hold expired 1 second prior and was claimed by User B, the update returns `0` rows and rolls back cleanly.
+2. **Database Engine Storage Layer:** The `orders.seat_id UNIQUE` constraint guarantees that even if a catastrophic software race condition occurred, the database storage engine physically blocks inserting a duplicate order for the same seat.
 
 ---
 
 ### E. Hold Expiration & Seat Reclamation Strategy
 
-To guarantee fairness and prevent seats from becoming permanently locked if a user abandons their browser, TicketHub implements a **Two-Tier Expiration Model**:
+To guarantee fairness and prevent seats from becoming permanently locked if a user abandons checkout, TicketHub implements a **dual expiration strategy**:
 
-1. **Passive / Lazy Expiration:** Handled directly in the SQL conditional queries:
-   $$\text{status} = \text{'held'} \text{ AND } \text{hold\_expires\_at} < \text{NOW}()$$
+1. **Passive / Lazy Reclamation (Zero-Latency Overhead):**
+   The conditional hold query explicitly checks:
+   `status = 'held' AND hold_expires_at < NOW()`
    If an abandoned seat is clicked by a new user after 10 minutes, the query automatically reclaims the seat and assigns it to the new user in a single atomic operation without waiting for a background worker.
 2. **Active Asynchronous Sweeper (Scheduled Worker):**
-   - A lightweight background worker runs every 15 seconds to sweep abandoned seats:
+   A lightweight background worker runs every 15 seconds to sweep abandoned seats:
 
 ```sql
 UPDATE seats
@@ -521,55 +525,55 @@ WHERE status = 'held'
   AND hold_expires_at < NOW();
 ```
 
-   - Thanks to the partial index `CREATE INDEX idx_seats_hold_expiry ON seats(hold_expires_at) WHERE status = 'held'`, this query executes in $<5\text{ ms}$, freeing abandoned seats and broadcasting an update via WebSocket/Redis PubSub to refresh the live seat map for waiting fans.
+Thanks to the partial index `CREATE INDEX idx_seats_hold_expiry ON seats(hold_expires_at) WHERE status = 'held'`, this query executes in <5 ms, freeing abandoned seats and broadcasting an update via WebSocket/Redis PubSub to refresh the live seat map for waiting fans.
 
 ---
 
 ## 6. High-Level Architecture & Surviving the Big Sale
 
 ```text
-                               [200,000 Users]
-                                      │
-                                      ▼
-                      ┌───────────────────────────────┐
-                      │   Cloudflare CDN & WAF Edge   │ (DDoS protection, static assets, bot shield)
-                      └───────────────┬───────────────┘
-                                      │
-                                      ▼
-                      ┌───────────────────────────────┐
-                      │  Load Balancer (Nginx / ALB)  │ (Round-Robin SSL termination & health checks)
-                      └───────────────┬───────────────┘
-                                      │
-          ┌───────────────────────────┴───────────────────────────┐
-          ▼                                                       ▼
-  [App Server Fleet 1..N]                                 [Virtual Waiting Room]
-  (Stateless Node.js Instances)                           (Redis Sorted Sets / Token Bucket)
-          │                                                       │
-          ├──────────────────────────┬────────────────────────────┤
-          ▼                          ▼                            ▼
-  ┌────────────────┐        ┌──────────────────┐        ┌───────────────────┐
-  │  Redis Cache   │        │   RabbitMQ Bus   │        │ Primary PostgreSQL│ (Writes & Holds)
-  │ (Seat Maps)    │        │ (Async Invoices) │        └─────────┬─────────┘
-  └────────────────┘        └──────────────────┘                  │ (WAL Replication)
-                                                                  ▼
-                                                        ┌───────────────────┐
-                                                        │   Read Replicas   │ (Browse & History)
-                                                        └───────────────────┘
+                                [200,000 Users]
+                                       |
+                                       v
+                       +-------------------------------+
+                       |   Cloudflare CDN & WAF Edge   | (DDoS protection, static assets, bot shield)
+                       +---------------+---------------+
+                                       |
+                                       v
+                       +-------------------------------+
+                       |  Load Balancer (Nginx / ALB)  | (Round-Robin SSL termination & health checks)
+                       +---------------+---------------+
+                                       |
+           +---------------------------+---------------------------+
+           v                                                       v
+   [App Server Fleet 1..N]                                 [Virtual Waiting Room]
+   (Stateless Node.js Instances)                           (Redis Sorted Sets / Token Bucket)
+           |                                                       |
+           +---------------------------+---------------------------+
+           v                           v                           v
+   +----------------+         +------------------+         +-------------------+
+   |  Redis Cache   |         |   RabbitMQ Bus   |         | Primary PostgreSQL| (Writes & Holds)
+   | (Seat Maps)    |         | (Async Invoices) |         +---------+---------+
+   +----------------+         +------------------+                   | (WAL Replication)
+                                                                     v
+                                                           +-------------------+
+                                                           |   Read Replicas   | (Browse & History)
+                                                           +-------------------+
 ```
 
 ### Component Breakdown & How It Survives the Rush:
 
 1. **Cloudflare CDN & WAF Edge:**
-   - Absorbs DDoS attacks, filters automated scrapers, and caches static assets (`HTML`, `CSS`, `JS`, venue maps) with a $95\%+$ edge hit ratio.
+   - Absorbs DDoS attacks, filters automated scrapers, and caches static assets (`HTML`, `CSS`, `JS`, venue maps) with a 95%+ edge hit ratio.
 2. **Nginx Load Balancer:**
    - Evenly distributes incoming HTTPS requests across a stateless pool of application instances using Least Connections or Round-Robin.
 3. **Stateless Application Servers (Horizontally Scaled):**
    - Auto-scale from 5 instances to 50+ instances using container orchestration (Kubernetes/ECS) in response to CPU and request volume triggers. Because instances store zero session state, any instance can handle any user.
 4. **Virtual Waiting Room (Queue Throttling via Redis):**
-   - During the $200,000\text{-user}$ surge, users entering the ticket sale receive a cryptographically signed queue token stored in a Redis Sorted Set (`ZADD waiting_room timestamp userId`).
-   - A queue controller admits only $500\text{ users/minute}$ into the active checkout flow. The remaining users see a live animated countdown. This gates traffic so write attempts to PostgreSQL never exceed $50\text{--}100\text{ QPS}$, completely shielding the database from concurrency crashes.
+   - During the 200,000-user surge, users entering the ticket sale receive a cryptographically signed queue token stored in a Redis Sorted Set (`ZADD waiting_room timestamp userId`).
+   - A queue controller admits only 500 users/minute into the active checkout flow. The remaining users see a live animated countdown. This gates traffic so write attempts to PostgreSQL never exceed 50-100 QPS, completely shielding the database from concurrency crashes.
 5. **Redis Cache-Aside (Seat Maps):**
-   - The $3,333\text{ reads/sec}$ for seat map data are served entirely from Redis in $<1\text{ ms}$. When a seat is held or sold, the application updates the cached seat map key (`seats:event:1`) or lets it expire under a 3-second TTL.
+   - The 3,333 reads/sec for seat map data are served entirely from Redis in <1 ms. When a seat is held or sold, the application updates the cached seat map key (`seats:event:1`) or lets it expire under a 3-second TTL.
 6. **Primary PostgreSQL Database (Row-Level Locked Writes):**
    - Dedicated strictly to executing ACID hold transactions and payment confirmations.
 7. **Read Replica PostgreSQL Cluster:**
@@ -582,7 +586,7 @@ WHERE status = 'held'
 ### Trade-off 1: Cache Eventual Consistency vs. Database Survival
 
 - **Decision:** Serve the seat map (`GET /api/events/{id}/seats`) from a Redis cache with a short TTL (2–3 seconds) instead of querying PostgreSQL on every refresh.
-- **Benefit:** Reduces database query load from $3,333\text{ QPS}$ down to $<1\text{ QPS}$, preventing total database crash.
+- **Benefit:** Reduces database query load from 3,333 QPS down to <1 QPS, preventing total database crash.
 - **Trade-off (The Cost):** Eventual consistency. For up to 3 seconds, a seat that was just held by User A may still appear as `"available"` on User B's screen. If User B clicks it, they receive a `409 Conflict` error.
 - **Justification:** Accepting occasional 409 errors on hot seats is an essential trade-off to ensure the entire site stays online and operational for all 200,000 users.
 
@@ -600,7 +604,7 @@ WHERE status = 'held'
 ### Trade-off 3: Two-Tier Hybrid Locking (Redis TTL + DB Row Lock) vs. Single-Tier Pure DB Locking
 
 - **Decision:** Implement a two-tier locking model where incoming seat hold attempts must first acquire an in-memory distributed token with a 600-second TTL in Redis via an atomic Lua script before touching PostgreSQL, rather than relying exclusively on PostgreSQL pessimistic row locks.
-- **Benefit:** During peak surges ($200,000\text{ users}$ contending for $20,000\text{ seats}$), hotspot seats (e.g., front-row seats) receive hundreds of concurrent requests in the same millisecond. Redis intercepts and deflects $99\%$ of losing attempts in $<1\text{ ms}$ in-memory. Only the single winning request reaches PostgreSQL, reducing database write connection contention from $333+\text{ concurrent transactions}$ to low tens.
+- **Benefit:** During peak surges (200,000 users contending for 20,000 seats), hotspot seats (e.g., front-row seats) receive hundreds of concurrent requests in the same millisecond. Redis intercepts and deflects 99% of losing attempts in <1 ms in-memory. Only the single winning request reaches PostgreSQL, reducing database write connection contention from 333+ concurrent transactions to low tens.
 - **Trade-off (The Cost):** System complexity and distributed state management. If Redis crashes or experiences network partitioning, Redis keys could become desynchronized from PostgreSQL until TTL expiry.
 - **Justification:** Without the Redis Tier 1 guard, hundreds of concurrent database transactions queuing on the same row lock would exhaust PostgreSQL's connection pool (`max_connections`) and saturate disk I/O, crashing the database for all users.
 
@@ -609,6 +613,6 @@ WHERE status = 'held'
 ### Trade-off 4: Pessimistic Row Locking vs. Optimistic Concurrency Control (OCC)
 
 - **Decision:** Use pessimistic row-level locking via conditional SQL `UPDATE ... WHERE status = 'available'` rather than optimistic locking using version numbers (`version = 1`).
-- **Benefit:** In ultra-high contention scenarios (thousands of users attempting to claim the same front-row seat), optimistic concurrency causes $99.9\%$ of transactions to fail with version conflicts and retry repeatedly, generating a thundering herd storm. Pessimistic row locking immediately serializes access at the database engine level, rejecting non-winners cleanly in one pass.
+- **Benefit:** In ultra-high contention scenarios (thousands of users attempting to claim the same front-row seat), optimistic concurrency causes 99.9% of transactions to fail with version conflicts and retry repeatedly, generating a thundering herd storm. Pessimistic row locking immediately serializes access at the database engine level, rejecting non-winners cleanly in one pass.
 - **Trade-off (The Cost):** Minor thread blocking on that specific seat row while the update executes.
 - **Justification:** Because seats are individual records, lock contention is isolated to identical seat IDs, leaving all other seat purchases unblocked.
